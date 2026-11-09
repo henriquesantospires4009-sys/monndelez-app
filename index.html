@@ -62,7 +62,82 @@ function esc(v){return String(v).replace(/[&<>"']/g,function(c){return {'&':'&am
 function tgN(el){el.classList.toggle('ck');var a=document.querySelectorAll('#nCL .ci'),c=document.querySelectorAll('#nCL .ci.ck');document.getElementById('nT').textContent=c.length+'/'+a.length;document.getElementById('nF').style.width=(a.length?Math.round(c.length/a.length*100):0)+'%';}
 function tgF(el){el.classList.toggle('ck');var a=document.querySelectorAll('#fCL .ci'),c=document.querySelectorAll('#fCL .ci.ck');document.getElementById('fpT').textContent=c.length+'/'+a.length;document.getElementById('fpF').style.width=(a.length?Math.round(c.length/a.length*100):0)+'%';}
 function loadF(){var nc=document.querySelectorAll('#nCL .ci.ck').length,nt=document.querySelectorAll('#nCL .ci').length,p=nt?Math.round(nc/nt*100):0;var h='<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:12px"><span>💰 Pontos Extras</span><b style="color:#4A0D8B">'+pe.length+' mapeados</b></div>';h+='<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px"><span>🤝 Negociação</span><b style="color:'+(p===100?'#16A34A':p>0?'#F59E0B':'#9CA3AF')+'">'+p+'%</b></div>';document.getElementById('f5r').innerHTML=h;document.getElementById('f5p').textContent=pe.length;document.getElementById('f5s').textContent=p+'%';}
-function finV(){var nm=document.getElementById('fNm').value.trim();if(!nm){toast('Preencha o nome!');return;}var fc=document.querySelectorAll('#fCL .ci.ck').length,ft=document.querySelectorAll('#fCL .ci').length;if(fc<ft){toast('Complete o checklist!');return;}var av=document.getElementById('fAv').value;var summary='<div style="padding:4px 0">👤 <b>'+esc(nm)+'</b></div><div style="padding:4px 0">⭐ '+esc(av)+'</div><div style="padding:4px 0">💰 Pontos: '+pe.length+'</div><div style="padding:4px 0">✅ Checklist: '+fc+'/'+ft+'</div>';document.getElementById('dnR').innerHTML=summary;go('dn');toast('Visita finalizada!');}
+function finV(){var nm=document.getElementById('fNm').value.trim();if(!nm){toast('Preencha o nome!');return;}var fc=document.querySelectorAll('#fCL .ci.ck').length,ft=document.querySelectorAll('#fCL .ci').length;if(fc<ft){toast('Complete o checklist!');return;}var av=document.getElementById('fAv').value;var summary='<div style="padding:4px 0">👤 <b>'+esc(nm)+'</b></div><div style="padding:4px 0">⭐ '+esc(av)+'</div><div style="padding:4px 0">💰 Pontos: '+pe.length+'</div><div style="padding:4px 0">✅ Checklist: '+fc+'/'+ft+'</div>';document.getElementById('dnR').innerHTML=summary;archiveFinishedVisit();go('dn');toast('Visita salva neste celular!');}
+
+
+/* Persistencia local: dados guardados neste navegador/dispositivo via IndexedDB. */
+var dbLocal=null, saveTimer=null, localHistory=[];
+function openLocalDB(){
+ return new Promise(function(resolve){
+  if(!('indexedDB' in window)){resolve(null);return;}
+  var req=indexedDB.open('mondelez-visitas-local',1);
+  req.onupgradeneeded=function(){var db=req.result;if(!db.objectStoreNames.contains('dados'))db.createObjectStore('dados');};
+  req.onsuccess=function(){dbLocal=req.result;resolve(dbLocal);};
+  req.onerror=function(){resolve(null);};
+ });
+}
+function readLocalState(){
+ return new Promise(function(resolve){
+  if(!dbLocal){resolve(null);return;}
+  var tx=dbLocal.transaction('dados','readonly'),rq=tx.objectStore('dados').get('estado');
+  rq.onsuccess=function(){resolve(rq.result||null);};rq.onerror=function(){resolve(null);};
+ });
+}
+function captureLocalState(){
+ var fields={},nodes=document.querySelectorAll('.mn input,.mn textarea,.mn select');
+ nodes.forEach(function(el,i){var k=el.id||('campo_'+i);fields[k]=el.value;});
+ var toggles=[],items=document.querySelectorAll('.mn .ci,.mn .ri,.mn .gi,.mn .pi');
+ items.forEach(function(el){toggles.push(el.classList.contains('ck'));});
+ return {fields:fields,toggles:toggles,points:pe,store:cSt,screen:cSc,history:localHistory,updatedAt:new Date().toISOString()};
+}
+function saveLocalState(){
+ if(!dbLocal)return;
+ var data=captureLocalState();
+ try{var tx=dbLocal.transaction('dados','readwrite');tx.objectStore('dados').put(data,'estado');}catch(e){console.warn('Falha ao salvar dados locais',e);}
+}
+function queueLocalSave(){
+ if(saveTimer)clearTimeout(saveTimer);
+ saveTimer=setTimeout(saveLocalState,250);
+}
+function refreshSavedUI(){
+ var a=document.querySelectorAll('#pCL .ci'),c=document.querySelectorAll('#pCL .ci.ck');
+ if(document.getElementById('ppT')){document.getElementById('ppT').textContent=c.length+'/'+a.length;document.getElementById('ppF').style.width=(a.length?Math.round(c.length/a.length*100):0)+'%';}
+ var ra=document.querySelectorAll('#rPR .ri'),rb=document.querySelectorAll('#rPR .ri.ck'),oa=document.querySelectorAll('#rOB .gi'),ob=document.querySelectorAll('#rOB .gi.ck');
+ if(document.getElementById('rpT')){document.getElementById('rpT').textContent=(rb.length+ob.length)+'/'+(ra.length+oa.length)+' regras';document.getElementById('rpF').style.width=((ra.length+oa.length)?Math.round((rb.length+ob.length)/(ra.length+oa.length)*100):0)+'%';}
+ var ha=document.querySelectorAll('#hCL .ci'),hc=document.querySelectorAll('#hCL .ci.ck');
+ if(document.getElementById('hpT')){document.getElementById('hpT').textContent=hc.length+'/'+ha.length;document.getElementById('hpF').style.width=(ha.length?Math.round(hc.length/ha.length*100):0)+'%';}
+ for(var n=1;n<=4;n++){var cd=document.getElementById('rc'+n);if(!cd)continue;var x=cd.querySelectorAll('.ci'),y=cd.querySelectorAll('.ci.ck'),bd=document.getElementById('rbd'+n),br=document.getElementById('rb'+n);br.style.width=(x.length?Math.round(y.length/x.length*100):0)+'%';bd.textContent=y.length===x.length?'OK':y.length?y.length+'/'+x.length:'Pendente';bd.className=y.length===x.length?'bd bdg':y.length?'bd bdy':'bd bdp';}
+ var done=0;for(var q=1;q<=4;q++){var z=document.querySelectorAll('#rc'+q+' .ci'),zc=document.querySelectorAll('#rc'+q+' .ci.ck');if(z.length&&z.length===zc.length)done++;}
+ if(document.getElementById('rpT2'))document.getElementById('rpT2').textContent=done+'/4';
+ var ia=document.querySelectorAll('#s-etapa2 .pi'),ic=document.querySelectorAll('#s-etapa2 .pi.ck');
+ if(document.getElementById('iprog')){document.getElementById('iprog').textContent=ic.length+'/'+ia.length;document.getElementById('ipF').style.width=(ia.length?Math.round(ic.length/ia.length*100):0)+'%';}
+ if(typeof uE3==='function')uE3();
+ if(typeof rPE==='function')rPE();
+ var na=document.querySelectorAll('#nCL .ci'),nc=document.querySelectorAll('#nCL .ci.ck');
+ if(document.getElementById('nT')){document.getElementById('nT').textContent=nc.length+'/'+na.length;document.getElementById('nF').style.width=(na.length?Math.round(nc.length/na.length*100):0)+'%';}
+ var fa=document.querySelectorAll('#fCL .ci'),fc=document.querySelectorAll('#fCL .ci.ck');
+ if(document.getElementById('fpT')){document.getElementById('fpT').textContent=fc.length+'/'+fa.length;document.getElementById('fpF').style.width=(fa.length?Math.round(fc.length/fa.length*100):0)+'%';}
+ if(typeof loadF==='function')loadF();
+}
+async function restoreLocalState(){
+ await openLocalDB();var data=await readLocalState();if(!data)return;
+ Object.keys(data.fields||{}).forEach(function(k){var el=document.getElementById(k);if(el)el.value=data.fields[k];});
+ var items=document.querySelectorAll('.mn .ci,.mn .ri,.mn .gi,.mn .pi');
+ (data.toggles||[]).forEach(function(on,i){if(items[i])items[i].classList.toggle('ck',!!on);});
+ pe=Array.isArray(data.points)?data.points:[];
+ cSt=data.store||null;localHistory=Array.isArray(data.history)?data.history:[];
+ refreshSavedUI();
+ if(data.screen&&document.getElementById('s-'+data.screen))go(data.screen);
+}
+function archiveFinishedVisit(){
+ var snapshot=captureLocalState();
+ localHistory.push({store:cSt?((sN&&sN[cSt])||cSt):'Loja',finishedAt:new Date().toISOString(),data:snapshot});
+ saveLocalState();
+}
+document.addEventListener('input',queueLocalSave);
+document.addEventListener('change',queueLocalSave);
+document.addEventListener('click',function(){setTimeout(queueLocalSave,0);});
+restoreLocalState().then(function(){if(!dbLocal)toast('Armazenamento local indisponível neste navegador.');});
 
 function toast(m){var t=document.getElementById('toE');t.textContent=m;t.classList.add('sh');setTimeout(function(){t.classList.remove('sh');},2000);}
 var d=new Date();document.getElementById('wDt').textContent=d.toLocaleDateString('pt-BR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});var cI=['Planograma correto','Precificacao visivel','FIFO aplicado','Limpeza e organizacao','Material PDV presente'];for(var z=1;z<=5;z++){var cl=document.getElementById('cl'+z),h='';for(var w=0;w<cI.length;w++)h+='<div class="ci" onclick="tgC(this,'+z+')"><div class="cb">&#10003;</div><div class="cx">'+cI[w]+'</div></div>';cl.innerHTML=h;}
